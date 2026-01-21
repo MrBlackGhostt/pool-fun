@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use  anchor_lang::system_program::{Transfer, transfer};
-use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Mint, MintTo, TokenAccount, TokenInterface,TransferChecked, transfer_checked}};
+use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Mint,  TokenAccount, TokenInterface,TransferChecked }};
 
 
 use crate::states::CurveConfiguration;
@@ -59,7 +59,7 @@ impl <'info>BuyToken<'info> {
     
 
         
-       let signer_seeds = &[b"bonding-pump", mint_creator, &[bump]];
+    let signer_seeds = &[b"bonding-pump", mint_creator, &[bump]];
         let seed = &[&signer_seeds[..]];
 
     let cpi_context =        CpiContext::new(self.token_program.to_account_info(), cpi_accounts).with_signer(seed);
