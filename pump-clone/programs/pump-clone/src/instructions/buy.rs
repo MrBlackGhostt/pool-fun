@@ -1,3 +1,4 @@
+
 use anchor_lang::prelude::*;
 use  anchor_lang::system_program::{Transfer, transfer};
 use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Mint,  TokenAccount, TokenInterface,TransferChecked }};
@@ -5,12 +6,18 @@ use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Min
 
 use crate::states::CurveConfiguration;
 
+const ADMIN_PUBKEY: Pubkey = pubkey!("Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3");
+
 #[derive(Accounts)]
 pub struct BuyToken<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 /// CHECK: mint_creator in the buy
     pub mint_creator: UncheckedAccount<'info>,
+/// CHECK: Validated against ADMIN_PUBKEY constant
+#[account(mut, address = ADMIN_PUBKEY)]
+    pub admin: AccountInfo<'info>,
+
     #[account(mut, seeds=[b"bonding-pump", mint_creator.key().as_ref()] ,bump ) ]
     pub curve_config: Account<'info, CurveConfiguration>,
 
@@ -33,16 +40,34 @@ pub user_ata: InterfaceAccount<'info, TokenAccount>  ,
 }
 
 impl <'info>BuyToken<'info> {
-      pub  fn buy_token (&mut self, amount_in:u64, bump:u8)-> Result<()>{
-        let old_sol_reserve = self.curve_config.virtual_sol_reserve as u128;
-    let new_sol_reserves = old_sol_reserve + amount_in as u128;
-    let old_virtual_token = self.curve_config.virtual_token_reserve as u128;
+      pub  fn buy_token (&mut self,mut amount_in:u64, bump:u8)-> Result<()>{
+            // Fee calculation: 1% via integer division
+            // Note: Trades < 100 lamports pay 0% fee (intentional - lowers barrier for small traders)
+            // Strategy: Fee on BUY only (not on SELL) to reduce exit friction
+            let fee = amount_in * 1/ 100 ;
+
+        amount_in -= fee;
+
+         let fee_acc = Transfer{
+            from: self.user.to_account_info(),
+            to: self.admin.to_account_info()
+        };
+            
         
-    let product = old_sol_reserve * old_virtual_token;
+        let ctx_fee = CpiContext::new(self.system_program.to_account_info(), fee_acc);
 
-    let new_token_reserve = (product/new_sol_reserves) as u64 + 1; 
 
-    let token_out = old_virtual_token as u64 - new_token_reserve;
+        transfer(ctx_fee, fee)?;
+        let old_sol_reserve = self.curve_config.virtual_sol_reserve as u128;
+        let new_sol_reserves = old_sol_reserve + amount_in as u128;
+        let old_virtual_token = self.curve_config.virtual_token_reserve as u128;
+
+
+        let product = old_sol_reserve * old_virtual_token;
+
+        let new_token_reserve = (product/new_sol_reserves) as u64 + 1; 
+
+        let token_out = old_virtual_token as u64 - new_token_reserve;
          
         self.curve_config.virtual_sol_reserve = new_sol_reserves as u64;
         self.curve_config.virtual_token_reserve = new_token_reserve as u64;
@@ -58,7 +83,9 @@ impl <'info>BuyToken<'info> {
         let mint_creator = self.mint_creator.key.as_ref();
     
 
-        
+   
+  
+
     let signer_seeds = &[b"bonding-pump", mint_creator, &[bump]];
         let seed = &[&signer_seeds[..]];
 

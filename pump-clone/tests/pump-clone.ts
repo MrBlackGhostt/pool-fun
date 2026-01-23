@@ -15,7 +15,9 @@ describe("pump-clone", () => {
 
   let creator = new anchor.web3.Keypair();
   let user = new anchor.web3.Keypair();
-
+  
+  // Hardcoded admin pubkey (matches ADMIN_PUBKEY constant in buy.rs)
+  const adminPubkey = new anchor.web3.PublicKey("Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3");
   let curveSeed = [Buffer.from("bonding-pump"), creator.publicKey.toBuffer()];
   let mintSeed = [
     Buffer.from("bonding-pump-mint"),
@@ -29,6 +31,31 @@ describe("pump-clone", () => {
     program.programId
   );
 
+  const MPL_TOKEN_METADATA_PROGRAM_ID = new anchor.web3.PublicKey(
+    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+  );
+  console.log("The mint pda pubkey", mintPdaPubkey.toBase58());
+  let [metadata] = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      MPL_TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mintPdaPubkey.toBuffer(),
+    ],
+    MPL_TOKEN_METADATA_PROGRAM_ID
+  );
+
+  const user_token_account = getAssociatedTokenAddressSync(
+    mintPdaPubkey,
+    user.publicKey
+  );
+
+  const curveAta = getAssociatedTokenAddressSync(
+    mintPdaPubkey,
+    curveConfigPdaPubkey,
+    true
+  );
+
+  console.log("The metadata", metadata.toBase58());
   before("initialize airdrop", async () => {
     // Fund accounts using the provider wallet (1000 SOL pre-funded)
     const transaction = new anchor.web3.Transaction().add(
@@ -40,6 +67,11 @@ describe("pump-clone", () => {
       anchor.web3.SystemProgram.transfer({
         fromPubkey: provider.wallet.publicKey,
         toPubkey: user.publicKey,
+        lamports: 5 * anchor.web3.LAMPORTS_PER_SOL,
+      }),
+      anchor.web3.SystemProgram.transfer({
+        fromPubkey: provider.wallet.publicKey,
+        toPubkey: adminPubkey,
         lamports: 5 * anchor.web3.LAMPORTS_PER_SOL,
       })
     );
@@ -54,15 +86,21 @@ describe("pump-clone", () => {
 
   it("Is initialized!", async () => {
     // Add your test here.
+    const name = "Pool";
+    const symbol = "TEST";
+    const uri =
+      "https://th.bing.com/th/id/OIP.wtJFiv_9efEsP8qf8mrQ5gHaEK?w=291&h=181&c=7&r=0&o=7&pid=1.7&rm=3";
+
     const tx = await program.methods
-      .initialize()
-      .accounts({
+      .initialize(name, symbol, uri)
+      .accountsPartial({
         signer: creator.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
+        metadata: metadata,
+        tokenMetadataProgram: MPL_TOKEN_METADATA_PROGRAM_ID,
       })
       .signers([creator])
       .rpc();
-
     console.log("Your transaction signature", tx);
 
     let curveConfigPdaInfo = await provider.connection.getAccountInfo(
@@ -99,6 +137,7 @@ describe("pump-clone", () => {
         userAta: user_token_account,
         mintCreator: creator.publicKey,
         user: user.publicKey,
+        admin: adminPubkey,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([user])
@@ -113,11 +152,63 @@ describe("pump-clone", () => {
     assert.isAbove(Number(user_ata_balance.value.amount), 0);
   });
 
+  it("verify admin receives fee", async () => {
+    let amount_in = new anchor.BN(100);
+
+    let admin_bal_before = await provider.connection.getBalance(
+      adminPubkey
+    );
+
+    console.log("admin key", adminPubkey.toBase58());
+    console.log(
+      "the Balance of admin before",
+      admin_bal_before / anchor.web3.LAMPORTS_PER_SOL
+    );
+    // Define these INSIDE this test
+    const user_token_account = getAssociatedTokenAddressSync(
+      mintPdaPubkey,
+      user.publicKey
+    );
+    const curveAta = getAssociatedTokenAddressSync(
+      mintPdaPubkey,
+      curveConfigPdaPubkey,
+      true
+    );
+    const tx = await program.methods
+      .buyToken(amount_in)
+      .accountsPartial({
+        curveConfig: curveConfigPdaPubkey,
+        mint: mintPdaPubkey,
+        curveAta: curveAta,
+        userAta: user_token_account,
+        mintCreator: creator.publicKey,
+        user: user.publicKey,
+        admin: adminPubkey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
+
+    await provider.connection.confirmTransaction(tx);
+
+    let adminBalAfter = await provider.connection.getBalance(adminPubkey);
+
+    console.log(
+      "the Balance of admin After",
+      adminBalAfter / anchor.web3.LAMPORTS_PER_SOL
+    );
+
+    let feeReceived = adminBalAfter - admin_bal_before;
+
+    assert.equal(feeReceived, 1, "Admin balance increase by one");
+  });
+
   it("sell", async () => {
     const user_token_account = getAssociatedTokenAddressSync(
       mintPdaPubkey,
       user.publicKey
     );
+    //how it know whihc mint and token to look
     let balanceBefore = await provider.connection.getTokenAccountBalance(
       user_token_account
     );

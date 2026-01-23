@@ -10,9 +10,15 @@ declare_id!("4gLCJXsTLAxQVjqnTETFwf4WKE8MQUdpgGy4oULD6rMh");
 pub mod pump_clone {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        name: String,
+        symbol: String,
+        uri: String,
+    ) -> Result<()> {
         msg!("Greetings from: {:?}", ctx.program_id);
-        initialize_curve(ctx)
+        initialize_curve(ctx, name, symbol, uri)?;
+        Ok(())
     }
 
     pub fn buy_token(ctx: Context<BuyToken>, amount: u64) -> Result<()> {

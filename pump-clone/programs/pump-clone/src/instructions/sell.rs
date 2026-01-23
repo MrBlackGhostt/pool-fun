@@ -6,6 +6,9 @@ use anchor_spl::{
 use anchor_lang::system_program::{Transfer, transfer}; 
 use crate::states::CurveConfiguration;
 
+// NOTE: No fee on SELL (strategic decision)
+// Protocol charges 1% on BUY only to reduce exit friction and build user loyalty
+// This gives us a competitive advantage over platforms that charge both directions
 pub fn sell(ctx: Context<Sell>, amount: u64) -> Result<()> {
     // Implement sell logic here
     Ok(())

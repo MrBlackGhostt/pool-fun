@@ -1,1 +1,29 @@
-context.md
+# Anchor
+.anchor
+target/
+node_modules/
+test-ledger/
+.DS_Store
+
+# IDL
+*.so
+
+# Keys (IMPORTANT - never commit private keys!)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!Anchor.toml
+
+# Rust
+**/*.rs.bk
+Cargo.lock
+
+# Test artifacts
+.vscode/
+
+# Subproject ignores
+pump-clone/.anchor
+pump-clone/target/
+pump-clone/node_modules/
+pump-clone/test-ledger/

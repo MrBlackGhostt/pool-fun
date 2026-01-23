@@ -1,7 +1,23 @@
+# Anchor
 .anchor
+target/
+node_modules/
+test-ledger/
 .DS_Store
-target
+
+# IDL
+*.so
+
+# Keys (IMPORTANT - never commit private keys!)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!Anchor.toml
+
+# Rust
 **/*.rs.bk
-node_modules
-test-ledger
-.yarn
+Cargo.lock
+
+# Test artifacts
+.vscode/
