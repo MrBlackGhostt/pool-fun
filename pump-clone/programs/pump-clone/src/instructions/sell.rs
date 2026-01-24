@@ -5,14 +5,12 @@ use anchor_spl::{
 };
 use anchor_lang::system_program::{Transfer, transfer}; 
 use crate::states::CurveConfiguration;
+use crate::errors::ErrorCode::BoundingCurveFull;
 
 // NOTE: No fee on SELL (strategic decision)
 // Protocol charges 1% on BUY only to reduce exit friction and build user loyalty
 // This gives us a competitive advantage over platforms that charge both directions
-pub fn sell(ctx: Context<Sell>, amount: u64) -> Result<()> {
-    // Implement sell logic here
-    Ok(())
-}
+
 
 #[derive(Accounts)]
 pub struct Sell<'info> {
@@ -46,6 +44,11 @@ pub struct Sell<'info> {
 impl <'info> Sell<'info>{
 
    pub fn sell(&mut self, token_in:u64, bump:u8)-> Result<()>{
+    
+if self.curve_config.is_graduated {
+            return Err(error!(BoundingCurveFull));
+        }
+
     let old_sol_res = self.curve_config.virtual_sol_reserve as u128;
     let old_token_res= self.curve_config.virtual_token_reserve as u128; // this is used to calculate
         // the amount of token to give or take 

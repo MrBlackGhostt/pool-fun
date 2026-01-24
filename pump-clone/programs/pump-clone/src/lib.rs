@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+pub mod errors;
 pub mod instructions;
 pub mod states;
 
@@ -30,6 +31,12 @@ pub mod pump_clone {
     pub fn sell_token(ctx: Context<Sell>, amount: u64) -> Result<()> {
         let bump = ctx.bumps.curve_config;
         ctx.accounts.sell(amount, bump)?;
+        Ok(())
+    }
+
+    pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
+        let bump = ctx.bumps.curve_config;
+        ctx.accounts.withdraw(bump)?;
         Ok(())
     }
 }

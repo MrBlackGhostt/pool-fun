@@ -8,8 +8,9 @@ pub struct CurveConfiguration {
     pub virtual_token_reserve: u64,
     pub real_token_reserve: u64,
     pub real_sol_reserve: u64,
+    pub is_graduated: bool,
 }
 
 impl CurveConfiguration {
-    pub const LEN: usize = 8 + 32 + 32 + 8 * 4;
+    pub const LEN: usize = 8 + 32 + 32 + 8 * 4 + 1;
 }

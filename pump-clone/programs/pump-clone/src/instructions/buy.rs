@@ -1,12 +1,15 @@
 
+
 use anchor_lang::prelude::*;
 use  anchor_lang::system_program::{Transfer, transfer};
 use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Mint,  TokenAccount, TokenInterface,TransferChecked }};
 
-
+use crate::errors::ErrorCode::BoundingCurveFull;
 use crate::states::CurveConfiguration;
 
 const ADMIN_PUBKEY: Pubkey = pubkey!("Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3");
+
+const GRADUATION_THRESHOLD:u64 = 85 * 1000000000; 
 
 #[derive(Accounts)]
 pub struct BuyToken<'info> {
@@ -44,8 +47,13 @@ impl <'info>BuyToken<'info> {
             // Fee calculation: 1% via integer division
             // Note: Trades < 100 lamports pay 0% fee (intentional - lowers barrier for small traders)
             // Strategy: Fee on BUY only (not on SELL) to reduce exit friction
-            let fee = amount_in * 1/ 100 ;
+        
+        if self.curve_config.is_graduated {
+            msg!("The trading now happen on the raydium");
+            return Err(error!(BoundingCurveFull));
+        }
 
+            let fee = amount_in * 1/ 100 ;
         amount_in -= fee;
 
          let fee_acc = Transfer{
@@ -62,17 +70,21 @@ impl <'info>BuyToken<'info> {
         let new_sol_reserves = old_sol_reserve + amount_in as u128;
         let old_virtual_token = self.curve_config.virtual_token_reserve as u128;
 
-
-        let product = old_sol_reserve * old_virtual_token;
+        
+        let product = old_sol_reserve.checked_mul(old_virtual_token).expect("The prodctuct go out of bound");
 
         let new_token_reserve = (product/new_sol_reserves) as u64 + 1; 
 
         let token_out = old_virtual_token as u64 - new_token_reserve;
-         
+       
+        
+
         self.curve_config.virtual_sol_reserve = new_sol_reserves as u64;
         self.curve_config.virtual_token_reserve = new_token_reserve as u64;
         self.curve_config.real_token_reserve = self.curve_config.real_token_reserve - token_out;
         self.curve_config.real_sol_reserve += amount_in;
+
+      
 
     let cpi_accounts= TransferChecked{
             mint: self.mint.to_account_info(),
@@ -100,6 +112,11 @@ impl <'info>BuyToken<'info> {
         }                        ;
         let sol_transfer_ctx = CpiContext::new(self.system_program.to_account_info(), sol_transfeir_account);
          transfer(sol_transfer_ctx,amount_in )?;
+
+  if self.curve_config.virtual_sol_reserve >= GRADUATION_THRESHOLD {
+            self.curve_config.is_graduated = true;
+              msg!("🎓 Token graduated! Market cap: {} SOL", self.curve_config.virtual_sol_reserve / 1_000_000_000);
+        }
 
         Ok(())
     }
