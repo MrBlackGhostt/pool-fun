@@ -4,7 +4,7 @@ use anchor_spl::{
     token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
-use crate::errors::ErrorCode::NotGraduatedYet;
+use crate::errors::ErrorsCode::NotGraduatedYet;
 use crate::states::CurveConfiguration;
 
 

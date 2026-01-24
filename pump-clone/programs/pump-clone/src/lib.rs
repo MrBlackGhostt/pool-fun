@@ -22,15 +22,15 @@ pub mod pump_clone {
         Ok(())
     }
 
-    pub fn buy_token(ctx: Context<BuyToken>, amount: u64) -> Result<()> {
+    pub fn buy_token(ctx: Context<BuyToken>, amount: u64, min_token_out: u64) -> Result<()> {
         let bump = ctx.bumps.curve_config;
-        ctx.accounts.buy_token(amount, bump)?;
+        ctx.accounts.buy_token(amount, bump, min_token_out)?;
         Ok(())
     }
 
-    pub fn sell_token(ctx: Context<Sell>, amount: u64) -> Result<()> {
+    pub fn sell_token(ctx: Context<Sell>, amount: u64, min_sol_out: u64) -> Result<()> {
         let bump = ctx.bumps.curve_config;
-        ctx.accounts.sell(amount, bump)?;
+        ctx.accounts.sell(amount, bump, min_sol_out)?;
         Ok(())
     }
 

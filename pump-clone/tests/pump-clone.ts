@@ -137,7 +137,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .buyToken(amount)
+      .buyToken(amount, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -158,6 +158,40 @@ describe("pump-clone", () => {
     );
     console.log("user ata balance", user_ata_balance);
     assert.isAbove(Number(user_ata_balance.value.amount), 0);
+  });
+
+  it("reject buy with slipage protection", async () => {
+    let amount = new anchor.BN(4);
+    let min_token_amount = new anchor.BN(9999999999999);
+    const user_token_account = getAssociatedTokenAddressSync(
+      mintPdaPubkey,
+      user.publicKey
+    );
+
+    const curveAta = getAssociatedTokenAddressSync(
+      mintPdaPubkey,
+      curveConfigPdaPubkey,
+      true
+    );
+    try {
+      const tx = await program.methods
+        .buyToken(amount, min_token_amount)
+        .accountsPartial({
+          curveConfig: curveConfigPdaPubkey,
+          mint: mintPdaPubkey,
+          curveAta: curveAta,
+          userAta: user_token_account,
+          mintCreator: creator.publicKey,
+          user: user.publicKey,
+          admin: adminPubkey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
+      assert.fail("Should have thrown SlippageExceeded error");
+    } catch (err) {
+      assert.include(err.toString(), "SlippageExceeded");
+    }
   });
 
   it("verify admin receives fee", async () => {
@@ -181,7 +215,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .buyToken(amount_in)
+      .buyToken(amount_in, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -227,7 +261,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .sellToken(sellAmount)
+      .sellToken(sellAmount, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -264,7 +298,7 @@ describe("pump-clone", () => {
     );
 
     const tx = await program.methods
-      .buyToken(bigAmount)
+      .buyToken(bigAmount, new anchor.BN(1)) // Added min_token_out parameter!
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -288,11 +322,6 @@ describe("pump-clone", () => {
   });
 
   it("withdraw", async () => {
-    // Create creator's ATA if it doesn't exist
-    const { createAssociatedTokenAccountInstruction } = await import(
-      "@solana/spl-token"
-    );
-
     const createAtaIx = createAssociatedTokenAccountInstruction(
       creator.publicKey, // payer
       creator_token_account, // ata

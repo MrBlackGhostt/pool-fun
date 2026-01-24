@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 use  anchor_lang::system_program::{Transfer, transfer};
 use anchor_spl::{associated_token::AssociatedToken,  token_interface::{self, Mint,  TokenAccount, TokenInterface,TransferChecked }};
 
-use crate::errors::ErrorCode::BoundingCurveFull;
+use crate::errors::ErrorsCode::{self, BoundingCurveFull, InvalidMinOutput, SlippageExceeded};
 use crate::states::CurveConfiguration;
 
 const ADMIN_PUBKEY: Pubkey = pubkey!("Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3");
@@ -43,11 +43,12 @@ pub user_ata: InterfaceAccount<'info, TokenAccount>  ,
 }
 
 impl <'info>BuyToken<'info> {
-      pub  fn buy_token (&mut self,mut amount_in:u64, bump:u8)-> Result<()>{
+      pub  fn buy_token (&mut self,mut amount_in:u64, bump:u8, min_token_out:u64)-> Result<()>{
             // Fee calculation: 1% via integer division
             // Note: Trades < 100 lamports pay 0% fee (intentional - lowers barrier for small traders)
             // Strategy: Fee on BUY only (not on SELL) to reduce exit friction
-        
+       require!(min_token_out > 0, ErrorsCode::InvalidMinOutput);
+
         if self.curve_config.is_graduated {
             msg!("The trading now happen on the raydium");
             return Err(error!(BoundingCurveFull));
@@ -77,7 +78,7 @@ impl <'info>BuyToken<'info> {
 
         let token_out = old_virtual_token as u64 - new_token_reserve;
        
-        
+       require!(token_out >= min_token_out, ErrorsCode::SlippageExceeded); 
 
         self.curve_config.virtual_sol_reserve = new_sol_reserves as u64;
         self.curve_config.virtual_token_reserve = new_token_reserve as u64;

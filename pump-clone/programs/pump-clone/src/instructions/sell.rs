@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use anchor_lang::system_program::{Transfer, transfer}; 
 use crate::states::CurveConfiguration;
-use crate::errors::ErrorCode::BoundingCurveFull;
+use crate::errors::ErrorsCode::{self, BoundingCurveFull,InvalidMinOutput, SlippageExceeded};
 
 // NOTE: No fee on SELL (strategic decision)
 // Protocol charges 1% on BUY only to reduce exit friction and build user loyalty
@@ -43,8 +43,9 @@ pub struct Sell<'info> {
 
 impl <'info> Sell<'info>{
 
-   pub fn sell(&mut self, token_in:u64, bump:u8)-> Result<()>{
+   pub fn sell(&mut self, token_in:u64, bump:u8, min_sol_out:u64)-> Result<()>{
     
+       require!(min_sol_out > 0, ErrorsCode::InvalidMinOutput);
 if self.curve_config.is_graduated {
             return Err(error!(BoundingCurveFull));
         }
@@ -62,7 +63,7 @@ let product = old_token_res * old_sol_res ;
         // sol to transfer to the user 
     let sol_out = (old_sol_res as u64 - new_sol_out) as u64;
     //
-      
+     require!(sol_out >= min_sol_out, ErrorsCode::SlippageExceeded); 
     self.curve_config.virtual_token_reserve = new_token_rev as u64;
     self.curve_config.virtual_sol_reserve = new_sol_out ;
     self.curve_config.real_sol_reserve -= sol_out;    
