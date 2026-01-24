@@ -78,7 +78,6 @@ let product = old_token_res * old_sol_res ;
 let mint_creator = self.mint_creator.key.as_ref();
 let seeds = &[b"bonding-pump", mint_creator, &[bump]];
 
-        let signer_seeds = &[&seeds[..]]; 
 
     let ctx = CpiContext::new(self.token_program.to_account_info(),account_ctx); 
 let decimals = self.mint.decimals;

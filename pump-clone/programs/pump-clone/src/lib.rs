@@ -5,7 +5,7 @@ pub mod states;
 
 use instructions::*; // Imports buy, sell, initialize_curve
 
-declare_id!("4gLCJXsTLAxQVjqnTETFwf4WKE8MQUdpgGy4oULD6rMh");
+declare_id!("9V7u5GQaQmvE4QuBNXC7ZxLDG8wE9twdegMA5JtXnKGv");
 
 #[program]
 pub mod pump_clone {

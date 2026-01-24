@@ -5,15 +5,23 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+pump_clone = "9V7u5GQaQmvE4QuBNXC7ZxLDG8wE9twdegMA5JtXnKGv"  # Your current program ID
+
 [programs.localnet]
-pump_clone = "4gLCJXsTLAxQVjqnTETFwf4WKE8MQUdpgGy4oULD6rMh"
+pump_clone = "9V7u5GQaQmvE4QuBNXC7ZxLDG8wE9twdegMA5JtXnKGv"
 
 [registry]
 url = "https://api.apr.dev"
 
+# [provider]
+# cluster = "localnet"
+# wallet = "~/.config/solana/id.json"
 [provider]
-cluster = "localnet"
+cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
+
+
 
 [[test.genesis]]
 address = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
