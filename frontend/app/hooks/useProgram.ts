@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program, Idl } from "@coral-xyz/anchor";
-import idl from "../../../idl/pool_fun.json";
+import idl from "../../idl/pool_fun.json";
 
 export function useProgram() {
   const { connection } = useConnection();
