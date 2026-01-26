@@ -38,10 +38,36 @@ export default function TokenDetailPage() {
   // Buy/Sell states
   const [buyAmount, setBuyAmount] = useState("");
   const [sellAmount, setSellAmount] = useState("");
+  const [slippage, setSlippage] = useState(5); // 5% default slippage
   const [buyLoading, setBuyLoading] = useState(false);
   const [sellLoading, setSellLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Calculate estimated outputs
+  const estimatedTokensOut = buyAmount && curveState ? (() => {
+    try {
+      const solInLamports = parseFloat(buyAmount) * LAMPORTS_PER_SOL;
+      const feeAmount = Math.floor(solInLamports * 0.01);
+      const solAfterFee = solInLamports - feeAmount;
+      const k = BigInt(curveState.virtualSolReserve) * BigInt(curveState.virtualTokenReserve);
+      const newSolReserve = BigInt(curveState.virtualSolReserve) + BigInt(solAfterFee);
+      const newTokenReserve = k / newSolReserve;
+      const tokensOut = BigInt(curveState.virtualTokenReserve) - newTokenReserve;
+      return Number(tokensOut) / 1e9;
+    } catch { return 0; }
+  })() : 0;
+
+  const estimatedSolOut = sellAmount && curveState ? (() => {
+    try {
+      const tokensInRaw = parseFloat(sellAmount) * 1e9;
+      const k = BigInt(curveState.virtualSolReserve) * BigInt(curveState.virtualTokenReserve);
+      const newTokenReserve = BigInt(curveState.virtualTokenReserve) + BigInt(Math.floor(tokensInRaw));
+      const newSolReserve = k / newTokenReserve;
+      const solOut = BigInt(curveState.virtualSolReserve) - newSolReserve;
+      return Number(solOut) / LAMPORTS_PER_SOL;
+    } catch { return 0; }
+  })() : 0;
 
   // Load token data
   useEffect(() => {
@@ -115,10 +141,36 @@ export default function TokenDetailPage() {
         throw new Error("Invalid amount");
       }
 
+      if (!curveState) {
+        throw new Error("Curve state not loaded");
+      }
+
       const mintPda = new PublicKey(mintAddress);
       const curveConfigPda = new PublicKey(token.curveConfigAddress);
       const creatorPubkey = new PublicKey(token.creator);
       const adminPubkey = new PublicKey("Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3");
+
+      // Calculate expected token output with 1% fee
+      const solInLamports = solAmount * LAMPORTS_PER_SOL;
+      const feeAmount = Math.floor(solInLamports * 0.01); // 1% fee
+      const solAfterFee = solInLamports - feeAmount;
+
+      // Bonding curve calculation: tokens_out = (sol_in * token_reserve) / (sol_reserve + sol_in)
+      const k = BigInt(curveState.virtualSolReserve) * BigInt(curveState.virtualTokenReserve);
+      const newSolReserve = BigInt(curveState.virtualSolReserve) + BigInt(solAfterFee);
+      const newTokenReserve = k / newSolReserve;
+      const tokensOut = BigInt(curveState.virtualTokenReserve) - newTokenReserve;
+
+      // Apply slippage tolerance
+      const minTokenOut = (tokensOut * BigInt(100 - slippage)) / BigInt(100);
+
+      console.log("Buy calculation:", {
+        solAmount,
+        feeAmount,
+        solAfterFee,
+        expectedTokens: tokensOut.toString(),
+        minTokenOut: minTokenOut.toString(),
+      });
 
       const [curveAta] = PublicKey.findProgramAddressSync(
         [curveConfigPda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintPda.toBuffer()],
@@ -129,8 +181,8 @@ export default function TokenDetailPage() {
 
       const tx = await program.methods
         .buyToken(
-          new BN(solAmount * LAMPORTS_PER_SOL),
-          new BN(0) // min_token_out (slippage protection)
+          new BN(solInLamports.toString()),
+          new BN(minTokenOut.toString())
         )
         .accounts({
           user: wallet.publicKey,
@@ -176,9 +228,32 @@ export default function TokenDetailPage() {
         throw new Error("Invalid amount");
       }
 
+      if (!curveState) {
+        throw new Error("Curve state not loaded");
+      }
+
       const mintPda = new PublicKey(mintAddress);
       const curveConfigPda = new PublicKey(token.curveConfigAddress);
       const creatorPubkey = new PublicKey(token.creator);
+
+      // Calculate expected SOL output (no fee on sells)
+      const tokensInRaw = tokenAmount * 1e9;
+
+      // Bonding curve calculation: sol_out = (tokens_in * sol_reserve) / (token_reserve + tokens_in)
+      const k = BigInt(curveState.virtualSolReserve) * BigInt(curveState.virtualTokenReserve);
+      const newTokenReserve = BigInt(curveState.virtualTokenReserve) + BigInt(Math.floor(tokensInRaw));
+      const newSolReserve = k / newTokenReserve;
+      const solOut = BigInt(curveState.virtualSolReserve) - newSolReserve;
+
+      // Apply slippage tolerance
+      const minSolOut = (solOut * BigInt(100 - slippage)) / BigInt(100);
+
+      console.log("Sell calculation:", {
+        tokenAmount,
+        tokensInRaw,
+        expectedSOL: solOut.toString(),
+        minSolOut: minSolOut.toString(),
+      });
 
       const [curveAta] = PublicKey.findProgramAddressSync(
         [curveConfigPda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintPda.toBuffer()],
@@ -189,8 +264,8 @@ export default function TokenDetailPage() {
 
       const tx = await program.methods
         .sellToken(
-          new BN(tokenAmount * 1e9),
-          new BN(0) // min_sol_out (slippage protection)
+          new BN(Math.floor(tokensInRaw)),
+          new BN(minSolOut.toString())
         )
         .accounts({
           user: wallet.publicKey,
@@ -396,6 +471,21 @@ export default function TokenDetailPage() {
 
                     <TabsContent value="buy" className="space-y-4">
                       <form onSubmit={handleBuy} className="space-y-4">
+                        {/* Slippage Settings */}
+                        <div className="space-y-2">
+                          <Label htmlFor="slippage">Slippage Tolerance (%)</Label>
+                          <Input
+                            id="slippage"
+                            type="number"
+                            min="0.1"
+                            max="50"
+                            step="0.1"
+                            value={slippage}
+                            onChange={(e) => setSlippage(parseFloat(e.target.value) || 5)}
+                            className="w-24"
+                          />
+                        </div>
+
                         <div className="space-y-2">
                           <Label htmlFor="buy-amount">Amount (SOL)</Label>
                           <Input
@@ -407,6 +497,17 @@ export default function TokenDetailPage() {
                             onChange={(e) => setBuyAmount(e.target.value)}
                             required
                           />
+                          {estimatedTokensOut > 0 && (
+                            <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2 mt-2">
+                              <p className="text-xs text-muted-foreground">Estimated Output</p>
+                              <p className="text-sm font-bold text-blue-600">
+                                ~{estimatedTokensOut.toFixed(2)} ${token?.symbol}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Min: {(estimatedTokensOut * (100 - slippage) / 100).toFixed(2)}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Button
                           type="submit"
@@ -420,6 +521,21 @@ export default function TokenDetailPage() {
 
                     <TabsContent value="sell" className="space-y-4">
                       <form onSubmit={handleSell} className="space-y-4">
+                        {/* Slippage Settings */}
+                        <div className="space-y-2">
+                          <Label htmlFor="slippage-sell">Slippage Tolerance (%)</Label>
+                          <Input
+                            id="slippage-sell"
+                            type="number"
+                            min="0.1"
+                            max="50"
+                            step="0.1"
+                            value={slippage}
+                            onChange={(e) => setSlippage(parseFloat(e.target.value) || 5)}
+                            className="w-24"
+                          />
+                        </div>
+
                         <div className="space-y-2">
                           <Label htmlFor="sell-amount">Amount (Tokens)</Label>
                           <Input
@@ -434,6 +550,17 @@ export default function TokenDetailPage() {
                           <p className="text-xs text-muted-foreground">
                             Balance: {userBalance.toFixed(2)}
                           </p>
+                          {estimatedSolOut > 0 && (
+                            <div className="bg-purple-500/10 border border-purple-500/30 rounded p-2 mt-2">
+                              <p className="text-xs text-muted-foreground">Estimated Output</p>
+                              <p className="text-sm font-bold text-purple-600">
+                                ~{estimatedSolOut.toFixed(4)} SOL
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Min: {(estimatedSolOut * (100 - slippage) / 100).toFixed(4)} SOL
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Button
                           type="submit"
