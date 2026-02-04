@@ -22,18 +22,39 @@ describe("pump-clone", () => {
   const adminPubkey = new anchor.web3.PublicKey(
     "Ex4xuNjnbmL7sbaM18WrgAMEv3LqurNQ379bUpWS4Xj3"
   );
-  let curveSeed = [Buffer.from("bonding-pump"), creator.publicKey.toBuffer()];
+  let name = "Pool";
+  let name2 = "Pool2";
+
+  // Derive mint PDAs FIRST (using creator + name)
   let mintSeed = [
     Buffer.from("bonding-pump-mint"),
     creator.publicKey.toBuffer(),
+    Buffer.from(name, "utf-8"),
+  ];
+  let mintSeed2 = [
+    Buffer.from("bonding-pump-mint"),
+    creator.publicKey.toBuffer(),
+    Buffer.from(name2, "utf-8"),
   ];
 
-  let [curveConfigPdaPubkey, curveBump] =
-    anchor.web3.PublicKey.findProgramAddressSync(curveSeed, program.programId);
   let [mintPdaPubkey, mintBump] = anchor.web3.PublicKey.findProgramAddressSync(
     mintSeed,
     program.programId
   );
+  let [mintPdaPubkey2, mintBump2] =
+    anchor.web3.PublicKey.findProgramAddressSync(
+      mintSeed2,
+      program.programId
+    );
+
+  // Derive curve config PDAs SECOND (using mint pubkey)
+  let curveSeed = [Buffer.from("bonding-pump"), mintPdaPubkey.toBuffer()];
+  let curveSeed2 = [Buffer.from("bonding-pump"), mintPdaPubkey2.toBuffer()];
+
+  let [curveConfigPdaPubkey, curveBump] =
+    anchor.web3.PublicKey.findProgramAddressSync(curveSeed, program.programId);
+  let [curveConfigPdaPubkey2, curveBump2] =
+    anchor.web3.PublicKey.findProgramAddressSync(curveSeed2, program.programId);
 
   const MPL_TOKEN_METADATA_PROGRAM_ID = new anchor.web3.PublicKey(
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
@@ -46,11 +67,6 @@ describe("pump-clone", () => {
       mintPdaPubkey.toBuffer(),
     ],
     MPL_TOKEN_METADATA_PROGRAM_ID
-  );
-
-  const user_token_account = getAssociatedTokenAddressSync(
-    mintPdaPubkey,
-    user.publicKey
   );
 
   const creator_token_account = getAssociatedTokenAddressSync(
@@ -66,22 +82,22 @@ describe("pump-clone", () => {
   console.log("The metadata", metadata.toBase58());
   before("initialize airdrop", async () => {
     // Fund accounts using the provider wallet
-    // Reduced amounts for devnet testing (limited faucet SOL)
+    // Reduced amounts for testing
     const transaction = new anchor.web3.Transaction().add(
       anchor.web3.SystemProgram.transfer({
         fromPubkey: provider.wallet.publicKey,
         toPubkey: creator.publicKey,
-        lamports: 0.5 * anchor.web3.LAMPORTS_PER_SOL, // Reduced from 5 SOL
+        lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
       }),
       anchor.web3.SystemProgram.transfer({
         fromPubkey: provider.wallet.publicKey,
         toPubkey: user.publicKey,
-        lamports: 2 * anchor.web3.LAMPORTS_PER_SOL, // Reduced from 100 SOL
+        lamports: 1 * anchor.web3.LAMPORTS_PER_SOL,
       }),
       anchor.web3.SystemProgram.transfer({
         fromPubkey: provider.wallet.publicKey,
         toPubkey: adminPubkey,
-        lamports: 0.5 * anchor.web3.LAMPORTS_PER_SOL, // Reduced from 500 SOL
+        lamports: 0.1 * anchor.web3.LAMPORTS_PER_SOL,
       })
     );
 
@@ -90,7 +106,7 @@ describe("pump-clone", () => {
     const creatorInfo = await provider.connection.getAccountInfo(
       creator.publicKey
     );
-    assert.equal(creatorInfo.lamports, 0.5 * anchor.web3.LAMPORTS_PER_SOL);
+    assert.equal(creatorInfo.lamports, 0.1 * anchor.web3.LAMPORTS_PER_SOL);
   });
 
   it("Is initialized!", async () => {
@@ -124,7 +140,47 @@ describe("pump-clone", () => {
     // Correct assertion: Check if the stored owner key equals the creator's key
     assert.ok(account.owner.equals(creator.publicKey));
   });
+  it("Is initialized! Token 2", async () => {
+    // Add your test here.
+    const name = "Pool2";
+    const symbol = "TEST";
+    const uri =
+      "https://th.bing.com/th/id/OIP.wtJFiv_9efEsP8qf8mrQ5gHaEK?w=291&h=181&c=7&r=0&o=7&pid=1.7&rm=3";
 
+    // Derive metadata for second token
+    let [metadata2] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        MPL_TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        mintPdaPubkey2.toBuffer(),
+      ],
+      MPL_TOKEN_METADATA_PROGRAM_ID
+    );
+
+    const tx = await program.methods
+      .initialize(name, symbol, uri)
+      .accountsPartial({
+        signer: creator.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        metadata: metadata2,
+        tokenMetadataProgram: MPL_TOKEN_METADATA_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+    console.log("Your transaction signature", tx);
+
+    let curveConfigPdaInfo2 = await provider.connection.getAccountInfo(
+      curveConfigPdaPubkey2
+    );
+    assert.ok(curveConfigPdaInfo2);
+
+    const account = await program.account.curveConfiguration.fetch(
+      curveConfigPdaPubkey2
+    );
+
+    // Correct assertion: Check if the stored owner key equals the creator's key
+    assert.ok(account.owner.equals(creator.publicKey));
+  });
   it("buy", async () => {
     let amount = new anchor.BN(4);
     const user_token_account = getAssociatedTokenAddressSync(
@@ -138,7 +194,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .buyToken(amount, new anchor.BN(1))
+      .buyToken(name, amount, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -176,7 +232,7 @@ describe("pump-clone", () => {
     );
     try {
       const tx = await program.methods
-        .buyToken(amount, min_token_amount)
+        .buyToken(name, amount, min_token_amount)
         .accountsPartial({
           curveConfig: curveConfigPdaPubkey,
           mint: mintPdaPubkey,
@@ -216,7 +272,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .buyToken(amount_in, new anchor.BN(1))
+      .buyToken(name, amount_in, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -262,7 +318,7 @@ describe("pump-clone", () => {
       true
     );
     const tx = await program.methods
-      .sellToken(sellAmount, new anchor.BN(1))
+      .sellToken(name, sellAmount, new anchor.BN(1))
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -303,7 +359,7 @@ describe("pump-clone", () => {
     );
 
     const tx = await program.methods
-      .buyToken(bigAmount, new anchor.BN(1)) // Added min_token_out parameter!
+      .buyToken(name, bigAmount, new anchor.BN(1)) // Added min_token_out parameter!
       .accountsPartial({
         curveConfig: curveConfigPdaPubkey,
         mint: mintPdaPubkey,
@@ -349,7 +405,7 @@ describe("pump-clone", () => {
     );
     console.log("curveal before", curve_token.value.amount);
     const tx = await program.methods
-      .withdraw()
+      .withdraw(name)
       .accountsPartial({
         mintCreator: creator.publicKey,
         curveConfig: curveConfigPdaPubkey,
